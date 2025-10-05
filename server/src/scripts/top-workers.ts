@@ -1,4 +1,7 @@
 import axios from 'axios';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 interface Shift {
   id: number;
@@ -94,15 +97,15 @@ function isCompletedShift(shift: Shift): boolean {
  * Gets the top 3 workers with the most completed shifts
  */
 async function getTopWorkers(): Promise<WorkerShiftCount[]> {
-  // Fetch all shifts and workers
-  const [shifts, workers] = await Promise.all([
-    fetchAllShifts(),
-    fetchAllWorkers()
-  ]);
+  // Fetch all shifts from API
+  const shifts = await fetchAllShifts();
+  
+  // Fetch all workers directly from the database
+  const dbWorkers = await prisma.worker.findMany();
   
   // Create a map of worker IDs to names
   const workerMap = new Map<number, string>();
-  for (const worker of workers) {
+  for (const worker of dbWorkers) {
     workerMap.set(worker.id, worker.name);
   }
   
@@ -114,7 +117,9 @@ async function getTopWorkers(): Promise<WorkerShiftCount[]> {
   
   for (const shift of completedShifts) {
     if (shift.workerId) {
+      // Get worker name from our database map
       const workerName = workerMap.get(shift.workerId) || `Worker ${shift.workerId}`;
+      
       workerCounts.set(
         workerName, 
         (workerCounts.get(workerName) || 0) + 1
@@ -139,6 +144,9 @@ async function main() {
   } catch (error) {
     console.error('Error:', error);
     process.exit(1);
+  } finally {
+    // Disconnect from the database
+    await prisma.$disconnect();
   }
 }
 
